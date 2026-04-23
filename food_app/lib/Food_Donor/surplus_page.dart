@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../services/firestore_service.dart';
 
 class LogSurplusFoodPage extends StatefulWidget {
   const LogSurplusFoodPage({super.key});
@@ -15,6 +16,7 @@ class LogSurplusFoodPage extends StatefulWidget {
 
 class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
   final _formKey = GlobalKey<FormState>();
+  final _firestoreService = FirestoreService();
   final foodTypeController = TextEditingController();
   final quantityController = TextEditingController();
   final notesController = TextEditingController();
@@ -29,6 +31,8 @@ class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = false;
+  bool _requiresColdStorage = false;
+  double _expiryHours = 4.0;
 
   final List<String> commonFoodTypes = [
     'Cooked Rice & Curry',
@@ -38,6 +42,7 @@ class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
     'Fresh Fruits',
     'Cooked Meals',
     'Packaged Snacks',
+    'Dairy Products',
     'Other',
   ];
 
@@ -102,26 +107,26 @@ class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
         imageUrl = await storageRef.getDownloadURL();
       }
 
-      await FirebaseFirestore.instance.collection('donations').add({
-        'donorId': user.uid,
-        'donorEmail': user.email,
+      await _firestoreService.createDonation({
         'foodType': foodTypeController.text.trim(),
         'quantity': '${quantityController.text.trim()} kg',
+        'quantityKg': double.tryParse(quantityController.text.trim()) ?? 0,
         'notes': notesController.text.trim(),
         'latitude': _currentPosition!.latitude,
         'longitude': _currentPosition!.longitude,
         'pickupFrom': _pickupFrom!.format(context),
         'pickupTo': _pickupTo!.format(context),
         'imageUrl': imageUrl ?? '',
+        'coldRequired': _requiresColdStorage,
+        'expiryHours': _expiryHours,
         'status': 'Logged',
-        'createdAt': FieldValue.serverTimestamp(),
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ Surplus food logged successfully!"), backgroundColor: Colors.green),
       );
 
-      Navigator.pop(context, true); // Return success flag to refresh dashboard
+      Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
@@ -192,6 +197,33 @@ class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+
+              const Text("Storage Requirements", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              SwitchListTile(
+                title: const Text("Requires Cold Storage"),
+                subtitle: const Text("For perishable items like dairy, cooked meals"),
+                value: _requiresColdStorage,
+                onChanged: (val) => setState(() => _requiresColdStorage = val),
+                activeColor: Colors.green,
+              ),
+              const SizedBox(height: 16),
+
+              const Text("Expiry Time (Hours)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Slider(
+                value: _expiryHours,
+                min: 1,
+                max: 24,
+                divisions: 23,
+                label: "${_expiryHours.toStringAsFixed(0)}h",
+                onChanged: (val) => setState(() => _expiryHours = val),
+              ),
+              Center(
+                child: Text(
+                  "Food will expire in ${_expiryHours.toStringAsFixed(0)} hours",
+                  style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
+                ),
               ),
               const SizedBox(height: 24),
 

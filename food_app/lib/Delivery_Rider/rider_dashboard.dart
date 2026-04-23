@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../role_selection_page.dart';   // Ensure correct import path
+import '../role_selection_page.dart';
+import '../screens/map_screen.dart';
 
 class RiderDashboard extends StatefulWidget {
   const RiderDashboard({super.key});
@@ -22,6 +23,10 @@ class _RiderDashboardState extends State<RiderDashboard> {
       "charityLocation": "Colombo 10 (Maradana)",
       "distance": 10.8,
       "status": "Available",
+      "donorLat": 6.8400,
+      "donorLon": 79.8700,
+      "charityLat": 6.9319,
+      "charityLon": 79.8478,
     },
     {
       "id": "J002",
@@ -33,6 +38,10 @@ class _RiderDashboardState extends State<RiderDashboard> {
       "charityLocation": "Colombo 07 (Cinnamon Gardens)",
       "distance": 9.5,
       "status": "Available",
+      "donorLat": 6.8300,
+      "donorLon": 79.8700,
+      "charityLat": 6.9044,
+      "charityLon": 79.8600,
     },
   ];
 
@@ -289,6 +298,39 @@ class _RiderDashboardState extends State<RiderDashboard> {
                       Text("From: ${activeJob!["donorName"]} • ${activeJob!["donorLocation"]}"),
                       Text("To: ${activeJob!["charityName"]} • ${activeJob!["charityLocation"]}"),
                       const SizedBox(height: 20),
+
+                      // View on Map Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MapScreen(
+                                  donorLat: activeJob!["donorLat"],
+                                  donorLon: activeJob!["donorLon"],
+                                  charityLat: activeJob!["charityLat"],
+                                  charityLon: activeJob!["charityLon"],
+                                  donorName: activeJob!["donorName"],
+                                  charityName: activeJob!["charityName"],
+                                  foodType: activeJob!["foodType"],
+                                  isRider: true,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text("View on Map"),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.blue,
+                            side: const BorderSide(color: Colors.blue),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       if (currentJobStatus == "accepted")
                         SizedBox(

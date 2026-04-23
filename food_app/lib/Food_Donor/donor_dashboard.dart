@@ -1,10 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../role_selection_page.dart';
 import 'surplus_page.dart';
+import '../services/firestore_service.dart';
 
-class DonorDashboard extends StatelessWidget {
+class DonorDashboard extends StatefulWidget {
   const DonorDashboard({super.key});
+
+  @override
+  State<DonorDashboard> createState() => _DonorDashboardState();
+}
+
+class _DonorDashboardState extends State<DonorDashboard> {
+  final _firestoreService = FirestoreService();
+  Map<String, dynamic>? _donorStats;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final stats = await _firestoreService.getDonorStats();
+    setState(() => _donorStats = stats);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +74,11 @@ class DonorDashboard extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Food Donor Dashboard"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: "Refresh",
+            onPressed: _loadStats,
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Logout",
@@ -156,37 +182,32 @@ class DonorDashboard extends StatelessWidget {
 
             // 2. Impact Metrics
             const Text(
-              "Your Impact This Month",
+              "Your Impact",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: impactMetrics.map((metric) {
-                return Expanded(
-                  child: Card(
-                    margin: const EdgeInsets.only(right: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        children: [
-                          Icon(metric['icon'] as IconData, size: 32, color: Colors.green),
-                          const SizedBox(height: 8),
-                          Text(
-                            metric['value'] as String,
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            metric['label'] as String,
-                            style: const TextStyle(fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+              children: [
+                _buildImpactCard(
+                  'KG Rescued',
+                  '${_donorStats?['totalKg']?.toStringAsFixed(1) ?? '0.0'}',
+                  Icons.recycling,
+                  Colors.green,
+                ),
+                _buildImpactCard(
+                  'Donations',
+                  '${_donorStats?['totalDonations'] ?? '0'}',
+                  Icons.fastfood,
+                  Colors.orange,
+                ),
+                _buildImpactCard(
+                  'Completed',
+                  '${_donorStats?['completedDonations'] ?? '0'}',
+                  Icons.check_circle,
+                  Colors.blue,
+                ),
+              ],
             ),
             const SizedBox(height: 24),
 
@@ -230,27 +251,52 @@ class DonorDashboard extends StatelessWidget {
 
             // 4. Past Donations List
             const Text(
-              "Past Donations",
+              "Your Donations",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: pastDonations.length,
-              itemBuilder: (context, index) {
-                final donation = pastDonations[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: const Icon(Icons.fastfood, color: Colors.green),
-                    title: Text(donation['food']!),
-                    subtitle: Text("${donation['date']} • ${donation['charity']}"),
-                    trailing: Chip(
-                      label: Text(donation['status']!),
-                      backgroundColor: Colors.blue.shade50,
+            StreamBuilder<QuerySnapshot>(
+              stream: _firestoreService.getDonorDonations(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'No donations yet',
+                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Tap the + button to log your first surplus food',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  );
+                }
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    final doc = snapshot.data!.docs[index];
+                    final donation = doc.data() as Map<String, dynamic>;
+                    return _buildDonationCard(doc.id, donation);
+                  },
                 );
               },
             ),
@@ -258,17 +304,157 @@ class DonorDashboard extends StatelessWidget {
         ),
       ),
 
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const LogSurplusFoodPage()),
-        );
-      },
-      icon: const Icon(Icons.add),
-      label: const Text("Log Surplus Food"),
-      backgroundColor: Colors.green,
-    ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LogSurplusFoodPage()),
+          );
+          if (result == true) {
+            _loadStats();
+          }
+        },
+        icon: const Icon(Icons.add),
+        label: const Text("Log Surplus Food"),
+        backgroundColor: Colors.green,
+      ),
     );
+  }
+
+  Widget _buildImpactCard(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Card(
+        margin: const EdgeInsets.only(right: 8),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            children: [
+              Icon(icon, size: 32, color: color),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDonationCard(String docId, Map<String, dynamic> donation) {
+    final status = donation['status'] ?? 'Logged';
+    final statusColor = _getStatusColor(status);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.green.shade100,
+          child: const Icon(Icons.fastfood, color: Colors.green),
+        ),
+        title: Text(
+          donation['foodType'] ?? 'Unknown Food',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(donation['quantity'] ?? '0 kg'),
+            if (donation['pickupFrom'] != null)
+              Text('Pickup: ${donation['pickupFrom']} - ${donation['pickupTo']}'),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Chip(
+              label: Text(status),
+              backgroundColor: statusColor.withOpacity(0.1),
+              labelStyle: TextStyle(color: statusColor, fontSize: 12),
+            ),
+            if (status == 'Logged')
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    // TODO: Implement edit functionality
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Edit feature coming soon')),
+                    );
+                  } else if (value == 'delete') {
+                    _confirmDelete(docId);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Logged':
+        return Colors.blue;
+      case 'Claimed':
+        return Colors.orange;
+      case 'Picked Up':
+        return Colors.purple;
+      case 'Delivered':
+      case 'Completed':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Future<void> _confirmDelete(String docId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Donation'),
+        content: const Text('Are you sure you want to delete this donation?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _firestoreService.deleteDonation(docId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Donation deleted'), backgroundColor: Colors.green),
+          );
+          _loadStats();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      }
+    }
   }
 }
