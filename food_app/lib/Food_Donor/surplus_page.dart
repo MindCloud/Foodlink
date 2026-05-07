@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' show pi, sin;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,6 +11,14 @@ import 'dart:convert';
 import 'dart:async';
 import '../services/firestore_service.dart';
 
+// Theme Colors - Green, Yellow, White, Black
+const Color _primaryGreen = Color(0xFF1B5E20);
+const Color _lightGreen = Color(0xFF4CAF50);
+const Color _accentYellow = Color(0xFFFFD700);
+const Color _brightYellow = Color(0xFFFFEB3B);
+const Color _black = Color(0xFF0D0D0D);
+const Color _white = Color(0xFFFFFFFF);
+
 class LogSurplusFoodPage extends StatefulWidget {
   const LogSurplusFoodPage({super.key});
 
@@ -17,15 +26,44 @@ class LogSurplusFoodPage extends StatefulWidget {
   State<LogSurplusFoodPage> createState() => _LogSurplusFoodPageState();
 }
 
-class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
+class _LogSurplusFoodPageState extends State<LogSurplusFoodPage>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _firestoreService = FirestoreService();
   final foodTypeController = TextEditingController();
   final quantityController = TextEditingController();
   final notesController = TextEditingController();
 
+  // Animations
+  late AnimationController _floatController;
+  late AnimationController _pulseController;
+  late Animation<double> _floatAnimation;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatController = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _floatAnimation = Tween<double>(begin: -6, end: 6).animate(
+      CurvedAnimation(parent: _floatController, curve: Curves.easeInOutSine),
+    );
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
   @override
   void dispose() {
+    _floatController.dispose();
+    _pulseController.dispose();
     foodTypeController.dispose();
     quantityController.dispose();
     notesController.dispose();
@@ -322,408 +360,1098 @@ class _LogSurplusFoodPageState extends State<LogSurplusFoodPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Log Surplus Food"), backgroundColor: Colors.green),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Food Type", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                hint: const Text("Select food type"),
-                items: commonFoodTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                onChanged: (val) => foodTypeController.text = val ?? '',
-              ),
-              const SizedBox(height: 24),
+      backgroundColor: Colors.grey[50],
+      body: Stack(
+        children: [
+          // Animated Header Background
+          _buildAnimatedHeader(),
 
-              const Text("Quantity (kg)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              TextFormField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "e.g. 12"),
-                validator: (v) => v?.isEmpty ?? true ? "Quantity required" : null,
-              ),
-              const SizedBox(height: 24),
+          // Main Content
+          SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                // Custom App Bar
+                SliverToBoxAdapter(
+                  child: _buildAppBar(),
+                ),
 
-              const Text("Location (Required for matching)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-              // Location method toggle
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
+                // Form Content
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: ChoiceChip(
-                              label: const Text("Current GPS"),
-                              selected: !_useManualLocation,
-                              onSelected: (selected) {
-                                if (selected) setState(() => _useManualLocation = false);
-                              },
-                              selectedColor: Colors.green,
-                              labelStyle: TextStyle(
-                                color: !_useManualLocation ? Colors.white : Colors.black,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ChoiceChip(
-                              label: const Text("Enter Manually"),
-                              selected: _useManualLocation,
-                              onSelected: (selected) {
-                                if (selected) setState(() => _useManualLocation = true);
-                              },
-                              selectedColor: Colors.green,
-                              labelStyle: TextStyle(
-                                color: _useManualLocation ? Colors.white : Colors.black,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                          // Food Type Section
+                          _buildSectionHeader(Icons.restaurant_menu, "Food Type"),
+                          const SizedBox(height: 12),
+                          _buildFoodTypeDropdown(),
+                          const SizedBox(height: 24),
+
+                          // Quantity Section
+                          _buildSectionHeader(Icons.scale, "Quantity (kg)"),
+                          const SizedBox(height: 12),
+                          _buildQuantityField(),
+                          const SizedBox(height: 24),
+
+                          // Location Section
+                          _buildSectionHeader(Icons.location_on, "Location (Required)"),
+                          const SizedBox(height: 12),
+                          _buildLocationCard(),
+                          const SizedBox(height: 24),
+
+                          // Pickup Time Section
+                          _buildSectionHeader(Icons.access_time, "Pickup Time Window"),
+                          const SizedBox(height: 12),
+                          _buildPickupTimeButtons(),
+                          const SizedBox(height: 24),
+
+                          // Storage Section
+                          _buildStorageSection(),
+                          const SizedBox(height: 24),
+
+                          // Expiry Section
+                          _buildSectionHeader(Icons.timer, "Expiry Time (Hours)"),
+                          const SizedBox(height: 12),
+                          _buildExpirySlider(),
+                          const SizedBox(height: 24),
+
+                          // Notes Section
+                          _buildSectionHeader(Icons.edit_note, "Additional Notes (Optional)"),
+                          const SizedBox(height: 12),
+                          _buildNotesField(),
+                          const SizedBox(height: 24),
+
+                          // Photo Section
+                          _buildSectionHeader(Icons.camera_alt, "Photo (Optional)"),
+                          const SizedBox(height: 12),
+                          _buildPhotoSection(),
+                          const SizedBox(height: 100),
                         ],
                       ),
-                      const SizedBox(height: 12),
-
-                      // Show GPS capture or manual input based on selection
-                      if (!_useManualLocation) ...[
-                        ListTile(
-                          leading: const Icon(Icons.my_location, color: Colors.green, size: 32),
-                          title: Text(
-                            _currentPosition != null
-                                ? "✅ ${(_currentPosition!.latitude).toStringAsFixed(4)}, ${(_currentPosition!.longitude).toStringAsFixed(4)}"
-                                : "Tap capture to get current location",
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _currentPosition != null ? Colors.green : Colors.grey,
-                            ),
-                          ),
-                          trailing: ElevatedButton.icon(
-                            onPressed: _getCurrentLocation,
-                            icon: const Icon(Icons.location_searching),
-                            label: const Text("Capture"),
-                          ),
-                        ),
-                      ] else ...[
-                        // Search bar with autocomplete
-                        TextFormField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            labelText: "Search location",
-                            hintText: "Start typing... (e.g., Col, Kan, Gal)",
-                            border: const OutlineInputBorder(),
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _isSearching
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
-                                  )
-                                : _searchController.text.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          setState(() {
-                                            _searchResults = [];
-                                            _showSearchResults = false;
-                                          });
-                                        },
-                                      )
-                                    : null,
-                          ),
-                          onChanged: _onSearchChanged,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Type at least 2 letters to see suggestions",
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Search results dropdown
-                        if (_showSearchResults) ...[
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.green.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                              color: Colors.white,
-                            ),
-                            constraints: const BoxConstraints(maxHeight: 250),
-                            child: _searchResults.isNotEmpty
-                                ? ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: _searchResults.length,
-                                    itemBuilder: (context, index) {
-                                      final place = _searchResults[index];
-                                      final isCommon = _commonLocations.contains(place);
-                                      return Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: () => _selectSearchResult(place),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                            decoration: BoxDecoration(
-                                              border: index < _searchResults.length - 1
-                                                  ? Border(bottom: BorderSide(color: Colors.grey.shade200))
-                                                  : null,
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.location_on,
-                                                  color: isCommon ? Colors.green : Colors.blue,
-                                                  size: 20,
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        place['name'].toString().split(',')[0],
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: isCommon ? Colors.green.shade700 : Colors.black87,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                      if (place['name'].toString().contains(','))
-                                                        Text(
-                                                          place['name'].toString().split(',').skip(1).take(2).join(', '),
-                                                          style: TextStyle(
-                                                            fontSize: 11,
-                                                            color: Colors.grey[600],
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                        ),
-                                                      Text(
-                                                        '${place['lat'].toStringAsFixed(4)}, ${place['lon'].toStringAsFixed(4)}',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: Colors.grey[500],
-                                                          fontFamily: 'monospace',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                if (isCommon)
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.green.shade100,
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      'Popular',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: Colors.green.shade700,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : _isSearching
-                                    ? const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                      )
-                                    : const Padding(
-                                        padding: EdgeInsets.all(16),
-                                        child: Text(
-                                          'No locations found. Try typing more letters or enter coordinates manually below.',
-                                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Or enter coordinates directly
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "Or enter coordinates directly:",
-                          style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 8),
-                        
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _latitudeController,
-                                keyboardType: TextInputType.numberWithOptions(decimal: true, signed: true),
-                                decoration: const InputDecoration(
-                                  labelText: "Latitude",
-                                  hintText: "e.g., 6.9319",
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.north),
-                                ),
-                                validator: (v) {
-                                  if (_useManualLocation && (v?.isEmpty ?? true)) {
-                                    return "Required";
-                                  }
-                                  final lat = double.tryParse(v ?? '');
-                                  if (_useManualLocation && (lat == null || lat < -90 || lat > 90)) {
-                                    return "Invalid latitude (-90 to 90)";
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _longitudeController,
-                                keyboardType: TextInputType.numberWithOptions(decimal: true, signed: true),
-                                decoration: const InputDecoration(
-                                  labelText: "Longitude",
-                                  hintText: "e.g., 79.8478",
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.east),
-                                ),
-                                validator: (v) {
-                                  if (_useManualLocation && (v?.isEmpty ?? true)) {
-                                    return "Required";
-                                  }
-                                  final lon = double.tryParse(v ?? '');
-                                  if (_useManualLocation && (lon == null || lon < -180 || lon > 180)) {
-                                    return "Invalid longitude (-180 to 180)";
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              const Text("Pickup Time Window", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                        if (time != null) setState(() => _pickupFrom = time);
-                      },
-                      child: Text(_pickupFrom != null ? "From: ${_pickupFrom!.format(context)}" : "Select From"),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                        if (time != null) setState(() => _pickupTo = time);
-                      },
-                      child: Text(_pickupTo != null ? "To: ${_pickupTo!.format(context)}" : "Select To"),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              const Text("Storage Requirements", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              SwitchListTile(
-                title: const Text("Requires Cold Storage"),
-                subtitle: const Text("For perishable items like dairy, cooked meals"),
-                value: _requiresColdStorage,
-                onChanged: (val) => setState(() => _requiresColdStorage = val),
-                activeColor: Colors.green,
-              ),
-              const SizedBox(height: 16),
-
-              const Text("Expiry Time (Hours)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Slider(
-                value: _expiryHours,
-                min: 1,
-                max: 24,
-                divisions: 23,
-                label: "${_expiryHours.toStringAsFixed(0)}h",
-                onChanged: (val) => setState(() => _expiryHours = val),
-              ),
-              Center(
-                child: Text(
-                  "Food will expire in ${_expiryHours.toStringAsFixed(0)} hours",
-                  style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
                 ),
-              ),
-              const SizedBox(height: 24),
+              ],
+            ),
+          ),
 
-              const Text("Additional Notes (Optional)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              TextFormField(
-                controller: notesController,
-                maxLines: 2,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Any special instructions?"),
-              ),
-              const SizedBox(height: 24),
+          // Animated Submit Button
+          Positioned(
+            bottom: 20,
+            left: 20,
+            right: 20,
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _isLoading ? 1.0 : _pulseAnimation.value,
+                  child: _buildSubmitButton(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              const Text("Photo of Food (Optional)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              if (_selectedImage != null)
-                Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    image: DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover),
+  // ==================== HELPER WIDGETS ====================
+
+  Widget _buildAnimatedHeader() {
+    return AnimatedBuilder(
+      animation: _floatController,
+      builder: (context, child) {
+        return Container(
+          height: 200,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [_primaryGreen, _lightGreen, _accentYellow],
+              stops: [0.3, 0.6, 1.0],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(40),
+              bottomRight: Radius.circular(40),
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Floating Food Icons
+              ..._buildFloatingIcons(),
+              // Wave
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: CustomPaint(
+                  size: const Size(double.infinity, 50),
+                  painter: _WavePainter(
+                    animation: _floatController.value,
+                    color: Colors.grey[50]!,
                   ),
-                ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(onPressed: () => _pickImage(ImageSource.camera), icon: const Icon(Icons.camera_alt), label: const Text("Camera")),
-                  ElevatedButton.icon(onPressed: () => _pickImage(ImageSource.gallery), icon: const Icon(Icons.photo_library), label: const Text("Gallery")),
-                ],
-              ),
-              const SizedBox(height: 40),
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submitDonation,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Submit & Log Surplus Food", style: TextStyle(fontSize: 18)),
                 ),
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildFloatingIcons() {
+    final icons = [Icons.local_pizza, Icons.fastfood, Icons.cake, Icons.emoji_food_beverage];
+    return List.generate(4, (index) {
+      return AnimatedBuilder(
+        animation: _floatController,
+        builder: (context, child) {
+          final offset = sin((_floatController.value * 2 * pi) + (index * 0.8)) * 12;
+          return Positioned(
+            top: 30 + (index * 35) + offset,
+            left: index.isEven ? 25 + (index * 30) : null,
+            right: !index.isEven ? 25 + ((3 - index) * 30) : null,
+            child: Opacity(
+              opacity: 0.12,
+              child: Icon(icons[index], size: 28 + (index * 3), color: _white),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _white.withOpacity(0.3)),
+              ),
+              child: const Icon(Icons.arrow_back_ios, color: _white, size: 20),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Log Surplus Food",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: _white,
+                    letterSpacing: 0.5,
+                    shadows: [
+                      Shadow(color: _black, blurRadius: 10, offset: Offset(2, 2)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Share your extra food with those in need",
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: _white.withOpacity(0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(IconData icon, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [_accentYellow, _brightYellow]),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: _accentYellow.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: _primaryGreen, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: _black,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFoodTypeDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey[200]!,
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: DropdownButtonFormField<String>(
+        decoration: InputDecoration(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          hintText: "Select food type",
+          hintStyle: TextStyle(color: Colors.grey[500]),
+        ),
+        items: commonFoodTypes.map((e) => DropdownMenuItem(
+          value: e,
+          child: Text(e, style: const TextStyle(fontWeight: FontWeight.w600)),
+        )).toList(),
+        onChanged: (val) => foodTypeController.text = val ?? '',
+        icon: const Icon(Icons.arrow_drop_down, color: _primaryGreen),
+      ),
+    );
+  }
+
+  Widget _buildQuantityField() {
+    return TextFormField(
+      controller: quantityController,
+      keyboardType: TextInputType.number,
+      validator: (v) => v?.isEmpty ?? true ? "Quantity required" : null,
+      decoration: InputDecoration(
+        hintText: "e.g., 12",
+        suffixText: "kg",
+        suffixStyle: const TextStyle(color: _primaryGreen, fontWeight: FontWeight.w700),
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [_accentYellow, _brightYellow]),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.scale, color: _primaryGreen, size: 20),
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey[200]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: _lightGreen, width: 2),
+        ),
+        filled: true,
+        fillColor: _white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      ),
+    );
+  }
+
+  Widget _buildLocationCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey[200]!,
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Toggle Buttons
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildToggleButton(
+                    label: "GPS Location",
+                    icon: Icons.my_location,
+                    isSelected: !_useManualLocation,
+                    onTap: () => setState(() => _useManualLocation = false),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildToggleButton(
+                    label: "Manual Entry",
+                    icon: Icons.edit_location,
+                    isSelected: _useManualLocation,
+                    onTap: () => setState(() => _useManualLocation = true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: !_useManualLocation ? _buildGPSContent() : _buildManualLocationContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(colors: [_lightGreen, _primaryGreen])
+              : null,
+          color: isSelected ? null : Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: isSelected ? _white : Colors.grey[600]),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? _white : Colors.grey[600],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildGPSContent() {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        return Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _currentPosition != null
+                          ? [_lightGreen.withOpacity(0.2), _lightGreen.withOpacity(0.1)]
+                          : [Colors.orange.withOpacity(0.2), Colors.orange.withOpacity(0.1)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.location_on,
+                    color: _currentPosition != null ? _lightGreen : Colors.orange,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentPosition != null ? "Location Captured" : "Capture Location",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _currentPosition != null ? _lightGreen : Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentPosition != null
+                            ? "${_currentPosition!.latitude.toStringAsFixed(4)}, ${_currentPosition!.longitude.toStringAsFixed(4)}"
+                            : "Tap button to get GPS coordinates",
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _buildAnimatedButton(
+              onPressed: _getCurrentLocation,
+              icon: Icons.location_searching,
+              label: _currentPosition != null ? "Update Location" : "Capture GPS",
+              gradient: const [_lightGreen, _primaryGreen],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildManualLocationContent() {
+    return Column(
+      children: [
+        _buildSearchField(),
+        if (_showSearchResults) _buildSearchResults(),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildCoordField(_latitudeController, "Latitude", Icons.north),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildCoordField(_longitudeController, "Longitude", Icons.east),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextFormField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: "Search location...",
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [_accentYellow, _brightYellow]),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.search, color: _primaryGreen, size: 18),
+        ),
+        suffixIcon: _isSearching
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: _primaryGreen),
+                ),
+              )
+            : _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _searchResults = [];
+                        _showSearchResults = false;
+                      });
+                    },
+                  )
+                : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey[200]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _lightGreen, width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey[50],
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      onChanged: _onSearchChanged,
+    );
+  }
+
+  Widget _buildSearchResults() {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: _lightGreen.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(14),
+        color: _white,
+      ),
+      constraints: const BoxConstraints(maxHeight: 200),
+      child: _searchResults.isNotEmpty
+          ? ListView.builder(
+              shrinkWrap: true,
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                final place = _searchResults[index];
+                final isCommon = _commonLocations.contains(place);
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    Icons.location_on,
+                    color: isCommon ? _lightGreen : Colors.blue,
+                    size: 20,
+                  ),
+                  title: Text(
+                    place['name'].toString().split(',')[0],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isCommon ? _primaryGreen : _black,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${place['lat'].toStringAsFixed(4)}, ${place['lon'].toStringAsFixed(4)}',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                  ),
+                  trailing: isCommon
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _accentYellow.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'POPULAR',
+                            style: TextStyle(fontSize: 8, color: _primaryGreen, fontWeight: FontWeight.w800),
+                          ),
+                        )
+                      : null,
+                  onTap: () => _selectSearchResult(place),
+                );
+              },
+            )
+          : _isSearching
+              ? const Center(child: CircularProgressIndicator(color: _primaryGreen))
+              : const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No results found', style: TextStyle(color: Colors.grey)),
+                ),
+    );
+  }
+
+  Widget _buildCoordField(TextEditingController controller, String label, IconData icon) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 18, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[200]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _lightGreen, width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey[50],
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+    );
+  }
+
+  Widget _buildPickupTimeButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildTimeButton(
+            label: _pickupFrom != null ? "From: ${_pickupFrom!.format(context)}" : "Select From",
+            icon: Icons.access_time,
+            onPressed: () async {
+              final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+              if (time != null) setState(() => _pickupFrom = time);
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildTimeButton(
+            label: _pickupTo != null ? "To: ${_pickupTo!.format(context)}" : "Select To",
+            icon: Icons.access_time_filled,
+            onPressed: () async {
+              final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+              if (time != null) setState(() => _pickupTo = time);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            decoration: BoxDecoration(
+              gradient: label.contains(":")
+                  ? const LinearGradient(colors: [_lightGreen, _primaryGreen])
+                  : null,
+              color: label.contains(":") ? null : _white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: label.contains(":") ? _lightGreen : Colors.grey[300]!,
+                width: label.contains(":") ? 2 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: label.contains(":")
+                      ? _lightGreen.withOpacity(0.3)
+                      : Colors.grey[200]!,
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: label.contains(":") ? _white : Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: label.contains(":") ? _white : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStorageSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _requiresColdStorage ? _lightGreen.withOpacity(0.1) : _white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _requiresColdStorage ? _lightGreen : Colors.grey[200]!,
+          width: _requiresColdStorage ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey[200]!,
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: _requiresColdStorage
+                  ? const LinearGradient(colors: [_lightGreen, _primaryGreen])
+                  : const LinearGradient(colors: [Colors.grey, Colors.grey]),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _requiresColdStorage ? Icons.ac_unit : Icons.thermostat,
+              color: _white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Cold Storage",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _requiresColdStorage ? _primaryGreen : _black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "For perishable items",
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _requiresColdStorage,
+            onChanged: (val) => setState(() => _requiresColdStorage = val),
+            activeColor: _lightGreen,
+            activeTrackColor: _lightGreen.withOpacity(0.3),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpirySlider() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _expiryHours < 4 ? Colors.red.withOpacity(0.1) : _accentYellow.withOpacity(0.1),
+            _expiryHours < 4 ? Colors.red.withOpacity(0.05) : _accentYellow.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _expiryHours < 4 ? Colors.red.withOpacity(0.3) : _accentYellow.withOpacity(0.5),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _expiryHours < 4 ? Icons.warning : Icons.check_circle,
+                color: _expiryHours < 4 ? Colors.red : _lightGreen,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "Expires in ${_expiryHours.toStringAsFixed(0)} hours",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: _expiryHours < 4 ? Colors.red : _primaryGreen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: _expiryHours < 4 ? Colors.red : _lightGreen,
+              inactiveTrackColor: Colors.grey[300],
+              thumbColor: _expiryHours < 4 ? Colors.red : _lightGreen,
+              overlayColor: (_expiryHours < 4 ? Colors.red : _lightGreen).withOpacity(0.2),
+              trackHeight: 8,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
+            ),
+            child: Slider(
+              value: _expiryHours,
+              min: 1,
+              max: 24,
+              divisions: 23,
+              label: "${_expiryHours.toStringAsFixed(0)}h",
+              onChanged: (val) => setState(() => _expiryHours = val),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesField() {
+    return TextFormField(
+      controller: notesController,
+      maxLines: 3,
+      decoration: InputDecoration(
+        hintText: "Any special instructions?",
+        prefixIcon: Padding(
+          padding: const EdgeInsets.only(top: 12, left: 12, right: 8),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_accentYellow, _brightYellow]),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.edit_note, color: _primaryGreen, size: 18),
+          ),
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey[200]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: _lightGreen, width: 2),
+        ),
+        filled: true,
+        fillColor: _white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
+  }
+
+  Widget _buildPhotoSection() {
+    return Column(
+      children: [
+        if (_selectedImage != null)
+          Container(
+            height: 200,
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              image: DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover),
+              boxShadow: [
+                BoxShadow(
+                  color: _black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildPhotoButton(
+                icon: Icons.camera_alt,
+                label: "Camera",
+                gradient: const [Colors.orange, Colors.deepOrange],
+                onTap: () => _pickImage(ImageSource.camera),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildPhotoButton(
+                icon: Icons.photo_library,
+                label: "Gallery",
+                gradient: const [_lightGreen, _primaryGreen],
+                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotoButton({
+    required IconData icon,
+    required String label,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: gradient),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: gradient[1].withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: _white, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: _white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAnimatedButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required List<Color> gradient,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: gradient),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: gradient[1].withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: _white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: _white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return GestureDetector(
+      onTap: _isLoading ? null : _submitDonation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        decoration: BoxDecoration(
+          gradient: _isLoading
+              ? null
+              : const LinearGradient(
+                  colors: [_accentYellow, _brightYellow],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+          color: _isLoading ? Colors.grey[400] : null,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: _isLoading ? Colors.grey : _accentYellow.withOpacity(0.5),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: _isLoading
+            ? const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(color: _white, strokeWidth: 3),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    "Logging Food...",
+                    style: TextStyle(
+                      color: _white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.volunteer_activism, color: _primaryGreen, size: 26),
+                  SizedBox(width: 12),
+                  Text(
+                    "SUBMIT DONATION",
+                    style: TextStyle(
+                      color: _primaryGreen,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+// ==================== WAVE PAINTER ====================
+
+class _WavePainter extends CustomPainter {
+  final double animation;
+  final Color color;
+
+  _WavePainter({required this.animation, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(0, size.height);
+    path.lineTo(0, size.height * 0.3);
+
+    for (var i = 0; i <= size.width.toInt(); i++) {
+      final x = i.toDouble();
+      final y = size.height * 0.3 + sin((x / size.width * 2 * pi) + (animation * 2 * pi)) * 12;
+      path.lineTo(x, y);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
